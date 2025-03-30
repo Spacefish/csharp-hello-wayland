@@ -6,21 +6,9 @@ var wlDisplay = WlDisplay.Connect();
 var wlRegistry = wlDisplay.GetRegistry();
 
 WlCompositor? wlCompositor = null;
-WlSeat? wlSeat = null;
 XdgWmBase? xdgWmBase = null;
 WlShm? wlShm = null;
-
-
-ZwpTextInputManagerV3? textInputManager = null;
-ZwpTextInputV3? textInput = null;
-
-
-/*
-wlDisplay.Error += (_, ea) =>
-{
-    Console.WriteLine($"WlDisplay Error: COde: {ea.Code} Message: {ea.Message}");
-};
-*/
+ZxdgDecorationManagerV1? zxdgDecorationManager = null;
 
 wlRegistry.Global += (_, ea) =>
 {
@@ -36,14 +24,8 @@ wlRegistry.Global += (_, ea) =>
         wlShm = wlRegistry.Bind<WlShm>(ea.Name, ea.Interface, ea.Version);
         Console.WriteLine($"Found: {ea.Name} {ea.Interface} {ea.Version}");
     }
-
-    if(ea.Interface == WlInterface.WlSeat.Name) {
-        wlSeat = wlRegistry.Bind<WlSeat>(ea.Name, ea.Interface, ea.Version);
-        Console.WriteLine($"Found: {ea.Name} {ea.Interface} {ea.Version}");
-    }
-    if(ea.Interface == WlInterface.ZwpTextInputManagerV3.Name) {
-        textInputManager = wlRegistry.Bind<ZwpTextInputManagerV3>(ea.Name, ea.Interface, ea.Version);
-        // tim.GetTextInput();
+    if(ea.Interface == WlInterface.ZxdgDecorationManagerV1.Name) {
+        zxdgDecorationManager = wlRegistry.Bind<ZxdgDecorationManagerV1>(ea.Name, ea.Interface, ea.Version);
         Console.WriteLine($"Found: {ea.Name} {ea.Interface} {ea.Version}");
     }
 };
@@ -55,101 +37,83 @@ if(xdgWmBase == null)
     throw new NotSupportedException($"Wayland registry did not advertise {WlInterface.XdgWmBase.Name} found");
 if(wlShm == null)
     throw new NotSupportedException($"Wayland registry did not advertise {WlInterface.WlShm.Name} found");
+if(zxdgDecorationManager == null) {
+    Console.WriteLine("Warning: No decoration manager found, using client side decorations / no decorations");
+}
 
-if(wlSeat == null)
-    throw new NotSupportedException($"Wayland registry did not advertise {WlInterface.WlSeat.Name} found");
-if(textInputManager == null)
-    throw new NotSupportedException($"Wayland registry did not advertise {WlInterface.ZwpTextInputManagerV3.Name} found");
-
-
+// handle pings so the compositor does not kill us
 xdgWmBase.Ping += (_, d) =>
 {
     Console.WriteLine($"Ping: {d.Serial}");
     xdgWmBase.Pong(d.Serial);
 };
 
-
 var mySurface = wlCompositor.CreateSurface();
 Console.WriteLine("Created surface!");
 
 var xdgSurface = xdgWmBase.GetXdgSurface(mySurface);
-Console.WriteLine("Created xdg surface!");
-
-var xdgToplevel = xdgSurface.GetToplevel();
-xdgToplevel.SetTitle("Hello World");
-xdgToplevel.SetAppId("com.example.helloworld");
-
-xdgSurface.SetWindowGeometry(0, 0, 1024, 1024);
-
-xdgToplevel.Configure += (_, d) =>
-{
-    Console.WriteLine($"Toplevel Configure: {d.GetType()} {d.Width} {d.Height} StatesSize: {d.States.Size}");
-};
-
 xdgSurface.Configure += (_, d) =>
 {
     Console.WriteLine($"Configure: {d.GetType()}");
-    // xdgSurface.SetWindowGeometry(d.X, d.Y, d.Width, d.Height);
     xdgSurface.AckConfigure(d.Serial);
-    // xdgToplevel.Resize(wlSeat, d.Serial, XdgToplevelResizeEdge.Top);
 };
 
+// we are a toplevel surface
+var xdgToplevel = xdgSurface.GetToplevel();
+xdgToplevel.SetTitle("Hello Wayland");
+xdgToplevel.SetAppId("de.neosolve.hellowayland");
+xdgToplevel.Configure += (_, d) =>
+{
+    Console.WriteLine($"Toplevel Configure:{d.Width}x{d.Height}");
+};
 
-mySurface.Commit();
-Console.WriteLine("Committed surface!");
+// handle window close requests
+bool doExit = false;
+xdgToplevel.Close += (_, d) =>
+{
+    Console.WriteLine($"Toplevel Close: {d.GetType()}");
+    doExit = true;
+};
 
-MemoryMappedFile mmf = MemoryMappedFile.CreateNew(null, 1024*1024);
+// request Server Side decorations (does not work with mutter/GNOME as it does not support server side decorations)
+if(zxdgDecorationManager != null) {
+    var topLevelDecoration = zxdgDecorationManager.GetToplevelDecoration(xdgToplevel);
+    topLevelDecoration.SetMode(ZxdgToplevelDecorationV1Mode.ServerSide);
+}
 
-var pool = wlShm.CreatePool(mmf.SafeMemoryMappedFileHandle.DangerousGetHandle().ToInt32(), 1024*1024);
+// we want a 1024x768 window
+var width = 1024;
+var height = 768;
+
+// allocate a shared memory buffer
+var bufferSize = width * height * 3;
+MemoryMappedFile mmf = MemoryMappedFile.CreateNew(null, bufferSize);
+
+// create the shared memory pool
+var pool = wlShm.CreatePool(mmf.SafeMemoryMappedFileHandle.DangerousGetHandle().ToInt32(), bufferSize);
 if(pool == null)
     throw new NullReferenceException("Failed to create pool");
 
-var wlBuffer = pool.CreateBuffer(0, 128, 128, 128*3, WlShmFormat.Rgb888);
+// request the buffer
+var wlBuffer = pool.CreateBuffer(0, width, height, width * 3, WlShmFormat.Rgb888);
 
-wlDisplay.Dispatch();
-
-wlBuffer.Release += (_, d) =>
-{
-    Console.WriteLine($"Buffer released: {d}");
-};
-
+// get Span from buffer pointer
+Span<byte> buffer;
 unsafe {
     var va = mmf.CreateViewAccessor();
     var pointer = (byte*)va.SafeMemoryMappedViewHandle.DangerousGetHandle().ToPointer();
-    var span = new Span<byte>(pointer, 128*128*3);
-    while(true) {    
-        span.Fill((byte)Random.Shared.Next());
-        /*
-        for(int i = 0; i < span.Length; i++) {
-            span[i] = (byte)Random.Shared.Next();;
-            // span[i] = (byte)Random.Shared.Next();
-        }
-        */
-
-        mySurface.Attach(wlBuffer, 0, 0);
-        mySurface.Damage(0,0, 128,128);
-        mySurface.Commit();
-
-        wlDisplay.Roundtrip();
-        Thread.Sleep(TimeSpan.FromMilliseconds(20));
-        // Console.WriteLine("Dispatching...");
-    }
+    buffer = new Span<byte>(pointer, bufferSize);
 }
 
+while(!doExit) {    
+    // write random bytes to buffer so we see something in the windows instead of black
+    Random.Shared.NextBytes(buffer);
 
-textInput = textInputManager.GetTextInput(wlSeat)
-    ?? throw new NullReferenceException("Failed to get text input");
+    mySurface.Attach(wlBuffer, 0, 0);
+    mySurface.Damage(0,0, width,height);
+    mySurface.Commit();
 
-textInput.CommitString += (_, d) => { Console.WriteLine($"CommitString: {d.Text}"); };
-textInput.DeleteSurroundingText += (_, d) => { Console.WriteLine($"DeleteSurroundingText: {d.BeforeLength} {d.AfterLength}"); };
-textInput.Done += (_, d) => { Console.WriteLine($"Done: {d.Serial}"); };
-textInput.Enter += (_, d) => { Console.WriteLine($"Enter: {d.Surface}"); };
-textInput.Leave += (_, d) => { Console.WriteLine($"Leave: {d.Surface}"); };
-textInput.PreeditString += (_, d) => { Console.WriteLine($"PreeditString: {d.Text} {d.CursorBegin} {d.CursorEnd}"); };
-textInput.Enable();
+    wlDisplay.Roundtrip();
 
-// var tim = WlInterface.FromInterfaceName("zwp_text_input_manager_v3");
-
-Console.ReadLine();
-Console.WriteLine("HERE");
-// zwp_text_input_manager_v3
+    Thread.Sleep(TimeSpan.FromMilliseconds(20));
+}

@@ -14,9 +14,7 @@
     
     <AdditionalFiles Include="wayland.xml" WaylandProtocol="client" />
     <AdditionalFiles Include="xdg-shell.xml" WaylandProtocol="client" />
-    <AdditionalFiles Include="text-input-unstable-v3.xml" WaylandProtocol="client" />
-    
-    <!-- Add additional protocol files with more AdditionalFiles tags -->
+    <AdditionalFiles Include="xdg-decoration-unstable-v1.xml" WaylandProtocol="client" />
 </ItemGroup>
 
   <ItemGroup>
