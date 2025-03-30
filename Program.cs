@@ -1,4 +1,5 @@
-﻿using WaylandSharp;
+﻿using System.IO.MemoryMappedFiles;
+using WaylandSharp;
 
 var wlDisplay = WlDisplay.Connect();
 var wlRegistry = wlDisplay.GetRegistry();
@@ -81,26 +82,33 @@ Console.WriteLine("Created xdg surface!");
 var xdgToplevel = xdgSurface.GetToplevel();
 xdgToplevel.SetTitle("Hello World");
 xdgToplevel.SetAppId("com.example.helloworld");
-xdgToplevel.SetMaximized();
-xdgToplevel.SetMinSize(100, 100);
+// xdgToplevel.SetMinSize(100, 100);
 // xdgToplevel.SetParent(null);
 
 
 mySurface.Commit();
 Console.WriteLine("Committed surface!");
 
-//var pool = wlShm.CreatePool(0, 200);
-//if(pool == null)
-    //throw new NullReferenceException("Failed to create pool");
-WlBuffer? wlBuffer = null;
+MemoryMappedFile mmf = MemoryMappedFile.CreateNew(null, 1024*1024);
+// MemoryMappedViewStream stream = mmf.CreateViewStream(0, 200, MemoryMappedFileAccess.ReadWrite);
+
+var pool = wlShm.CreatePool(mmf.SafeMemoryMappedFileHandle.DangerousGetHandle().ToInt32(), 1024*1024);
+if(pool == null)
+    throw new NullReferenceException("Failed to create pool");
+
+var wlBuffer = pool.CreateBuffer(0, 16, 16, 48, WlShmFormat.Argb8888);
 
 
-// mySurface.Attach();
+mySurface.Attach(wlBuffer, 0, 0);
+
+wlDisplay.Dispatch();
 
 while(true) {
-    wlDisplay.Dispatch();
+    mySurface.Damage(0, 0, 16, 16);
+    mySurface.Frame();    
     Thread.Sleep(100);
     Console.WriteLine("Dispatching...");
+    wlDisplay.Roundtrip();
 }
 
 
