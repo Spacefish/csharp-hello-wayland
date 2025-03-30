@@ -1,4 +1,5 @@
 ﻿using System.IO.MemoryMappedFiles;
+using System.Runtime.InteropServices;
 using WaylandSharp;
 
 var wlDisplay = WlDisplay.Connect();
@@ -72,43 +73,67 @@ var mySurface = wlCompositor.CreateSurface();
 Console.WriteLine("Created surface!");
 
 var xdgSurface = xdgWmBase.GetXdgSurface(mySurface);
-xdgSurface.Configure += (_, d) =>
-{
-    Console.WriteLine($"Configure: {d.Serial}");
-    xdgSurface.AckConfigure(d.Serial);
-};
 Console.WriteLine("Created xdg surface!");
 
 var xdgToplevel = xdgSurface.GetToplevel();
 xdgToplevel.SetTitle("Hello World");
 xdgToplevel.SetAppId("com.example.helloworld");
-// xdgToplevel.SetMinSize(100, 100);
-// xdgToplevel.SetParent(null);
+
+xdgSurface.SetWindowGeometry(0, 0, 1024, 1024);
+
+xdgToplevel.Configure += (_, d) =>
+{
+    Console.WriteLine($"Toplevel Configure: {d.GetType()} {d.Width} {d.Height} StatesSize: {d.States.Size}");
+};
+
+xdgSurface.Configure += (_, d) =>
+{
+    Console.WriteLine($"Configure: {d.GetType()}");
+    // xdgSurface.SetWindowGeometry(d.X, d.Y, d.Width, d.Height);
+    xdgSurface.AckConfigure(d.Serial);
+    // xdgToplevel.Resize(wlSeat, d.Serial, XdgToplevelResizeEdge.Top);
+};
 
 
 mySurface.Commit();
 Console.WriteLine("Committed surface!");
 
 MemoryMappedFile mmf = MemoryMappedFile.CreateNew(null, 1024*1024);
-// MemoryMappedViewStream stream = mmf.CreateViewStream(0, 200, MemoryMappedFileAccess.ReadWrite);
 
 var pool = wlShm.CreatePool(mmf.SafeMemoryMappedFileHandle.DangerousGetHandle().ToInt32(), 1024*1024);
 if(pool == null)
     throw new NullReferenceException("Failed to create pool");
 
-var wlBuffer = pool.CreateBuffer(0, 16, 16, 48, WlShmFormat.Argb8888);
-
-
-mySurface.Attach(wlBuffer, 0, 0);
+var wlBuffer = pool.CreateBuffer(0, 128, 128, 128*3, WlShmFormat.Rgb888);
 
 wlDisplay.Dispatch();
 
-while(true) {
-    mySurface.Damage(0, 0, 16, 16);
-    mySurface.Frame();    
-    Thread.Sleep(100);
-    Console.WriteLine("Dispatching...");
-    wlDisplay.Roundtrip();
+wlBuffer.Release += (_, d) =>
+{
+    Console.WriteLine($"Buffer released: {d}");
+};
+
+unsafe {
+    var va = mmf.CreateViewAccessor();
+    var pointer = (byte*)va.SafeMemoryMappedViewHandle.DangerousGetHandle().ToPointer();
+    var span = new Span<byte>(pointer, 128*128*3);
+    while(true) {    
+        span.Fill((byte)Random.Shared.Next());
+        /*
+        for(int i = 0; i < span.Length; i++) {
+            span[i] = (byte)Random.Shared.Next();;
+            // span[i] = (byte)Random.Shared.Next();
+        }
+        */
+
+        mySurface.Attach(wlBuffer, 0, 0);
+        mySurface.Damage(0,0, 128,128);
+        mySurface.Commit();
+
+        wlDisplay.Roundtrip();
+        Thread.Sleep(TimeSpan.FromMilliseconds(20));
+        // Console.WriteLine("Dispatching...");
+    }
 }
 
 
