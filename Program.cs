@@ -1,5 +1,6 @@
 ﻿using System.IO.MemoryMappedFiles;
 using System.Runtime.InteropServices;
+using SkiaSharp;
 using WaylandSharp;
 
 var wlDisplay = WlDisplay.Connect();
@@ -86,7 +87,7 @@ var width = 1024;
 var height = 768;
 
 // allocate a shared memory buffer
-var bufferSize = width * height * 3;
+var bufferSize = width * height * 4;
 MemoryMappedFile mmf = MemoryMappedFile.CreateNew(null, bufferSize);
 
 // create the shared memory pool
@@ -95,19 +96,38 @@ if(pool == null)
     throw new NullReferenceException("Failed to create pool");
 
 // request the buffer
-var wlBuffer = pool.CreateBuffer(0, width, height, width * 3, WlShmFormat.Rgb888);
+var wlBuffer = pool.CreateBuffer(0, width, height, width * 4, WlShmFormat.Argb8888);
 
 // get Span from buffer pointer
 Span<byte> buffer;
+SKSurface? skiaSurface = null;
 unsafe {
     var va = mmf.CreateViewAccessor();
     var pointer = (byte*)va.SafeMemoryMappedViewHandle.DangerousGetHandle().ToPointer();
     buffer = new Span<byte>(pointer, bufferSize);
+
+    skiaSurface = SKSurface.Create(
+        new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul),
+        (nint)pointer);
 }
 
-while(!doExit) {    
+if(skiaSurface == null)
+    throw new NullReferenceException("Failed to create skia surface");
+
+using var canvas = skiaSurface.Canvas;
+
+int c = 0;
+while(!doExit) {
+    ++c;
     // write random bytes to buffer so we see something in the windows instead of black
-    Random.Shared.NextBytes(buffer);
+    // Random.Shared.NextBytes(buffer);
+    canvas.Clear(((c / 20) % 4) switch {
+        0 => SKColors.Red,
+        1 => SKColors.Green,
+        2 => SKColors.Blue,
+        _ => SKColors.Yellow }
+);
+    // Random.Shared.NextBytes(buffer);
 
     mySurface.Attach(wlBuffer, 0, 0);
     mySurface.Damage(0,0, width,height);
