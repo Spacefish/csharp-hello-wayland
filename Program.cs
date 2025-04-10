@@ -1,5 +1,7 @@
 ﻿using System.IO.MemoryMappedFiles;
 using System.Runtime.InteropServices;
+using Evergine.Bindings.Vulkan;
+using SkiaSharp;
 using WaylandSharp;
 
 var wlDisplay = WlDisplay.Connect();
@@ -85,6 +87,66 @@ if(zxdgDecorationManager != null) {
 var width = 1024;
 var height = 768;
 
+
+var vk = new Engine();
+vk.Init();
+
+/*
+var grVkExtensions = GRVkExtensions.Create(
+    (name, instance, device) => {
+        unsafe {
+            var pointer = VulkanNative.vkGetInstanceProcAddr(instance, (byte*)Marshal.StringToHGlobalAnsi(name));
+            Console.WriteLine($"name: {name} requested in delegate pointer is {pointer}");
+            return pointer;
+        }
+    },
+    vk.Instance.Handle,
+    vk.PhysicalDevice.Handle,
+    [],
+    []
+);
+*/
+
+
+var grVkBackendContext = new GRVkBackendContext{
+    VkInstance = vk.Instance.Handle,
+    VkPhysicalDevice = vk.PhysicalDevice.Handle,
+    VkDevice = vk.Device.Handle,
+    VkQueue = vk.GraphicsQueue.Handle,
+    GraphicsQueueIndex = vk.GraphicsQueueFamilyIndex,
+    GetProcedureAddress = (name, instance, device) => {
+        unsafe {
+            if(instance != 0)
+                return VulkanNative.vkGetInstanceProcAddr(instance, (byte*)Marshal.StringToHGlobalAnsi(name));
+            
+            if(device != 0)
+                return VulkanNative.vkGetDeviceProcAddr(device, (byte*)Marshal.StringToHGlobalAnsi(name));
+            
+            System.Runtime.InteropServices.NativeLibrary.TryGetExport(VulkanNative.NativeLib.NativeHandle, name, out var address);
+
+            if(address == 0)
+                throw new Exception($"Could not find function {name} in native vulkan lib!");
+
+            return address;
+        }
+    }
+};
+
+var vkContext = GRContext.CreateVulkan(grVkBackendContext);
+
+if(vkContext == null)
+    throw new Exception("Could not create Vulkan Context in Skia!");
+
+var skiaSurface = SKSurface.Create(vkContext, true, new SKImageInfo(width, height));
+
+skiaSurface.Canvas.Clear(SKColors.Beige);
+
+var image = skiaSurface.Snapshot();
+var jpg = image.Encode(SKEncodedImageFormat.Jpeg, 80);
+using (var os = File.OpenWrite("vulkan_rendered.jpg")) {
+    jpg.SaveTo(os);
+}
+
 // allocate a shared memory buffer
 var bufferSize = width * height * 3;
 MemoryMappedFile mmf = MemoryMappedFile.CreateNew(null, bufferSize);
@@ -112,7 +174,7 @@ wlDisplay.Dispatch();
 while(!doExit) {    
     // write random bytes to buffer so we see something in the windows instead of black
     Random.Shared.NextBytes(buffer);
-    
+
     mySurface.Attach(wlBuffer, 0, 0);
     mySurface.Damage(0,0, width,height);
     mySurface.Commit();

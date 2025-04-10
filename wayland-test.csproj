@@ -10,7 +10,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="WaylandSharp" Version="0.2.2" />
+    <PackageReference Include="SkiaSharp" Version="3.116.1" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="3.116.1" />
+    <PackageReference Include="WaylandSharp" Version="0.2.1" />
+    <PackageReference Include="Evergine.Bindings.Vulkan" Version="2025.3.1.37" />
   </ItemGroup>
 
   <ItemGroup>
