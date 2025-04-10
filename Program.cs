@@ -105,10 +105,14 @@ unsafe {
     buffer = new Span<byte>(pointer, bufferSize);
 }
 
+// comit changes to surface and then dispatch the configure callback
+mySurface.Commit();
+wlDisplay.Dispatch();
+
 while(!doExit) {    
     // write random bytes to buffer so we see something in the windows instead of black
     Random.Shared.NextBytes(buffer);
-
+    
     mySurface.Attach(wlBuffer, 0, 0);
     mySurface.Damage(0,0, width,height);
     mySurface.Commit();

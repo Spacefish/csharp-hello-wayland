@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <RootNamespace>wayland_test</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -10,14 +10,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="WaylandSharp" Version="0.2.2" />
+  </ItemGroup>
+
+  <ItemGroup>
     <CompilerVisibleItemMetadata Include="AdditionalFiles" MetadataName="WaylandProtocol" />
     
     <AdditionalFiles Include="wayland.xml" WaylandProtocol="client" />
     <AdditionalFiles Include="xdg-shell.xml" WaylandProtocol="client" />
     <AdditionalFiles Include="xdg-decoration-unstable-v1.xml" WaylandProtocol="client" />
-</ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="WaylandSharp" Version="0.2.2" />
-  </ItemGroup>
+  </ItemGroup>  
 </Project>
