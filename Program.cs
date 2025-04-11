@@ -1,4 +1,5 @@
 ﻿using System.IO.MemoryMappedFiles;
+using System.Reflection.Metadata.Ecma335;
 using System.Runtime.InteropServices;
 using Evergine.Bindings.Vulkan;
 using SkiaSharp;
@@ -164,13 +165,45 @@ unsafe {
 
 */
 
+[DllImport ("libSkiaSharp", CallingConvention = CallingConvention.Cdecl)]
+// [LibraryImport("libSkiaSharp")]
+static extern nint sk_surface_get_backend_render_target (nint surfaceHandle);
+
 new GRBackendRenderTarget(width, height, 1, new GRVkImageInfo {
     ImageLayout = 2
 });
 
 var skiaSurface = SKSurface.Create(vkContext, true, new SKImageInfo(width, height));
 
+// var brt = sk_surface_get_backend_render_target(skiaSurface.Handle);
+
 skiaSurface.Canvas.Clear(SKColors.Beige);
+
+drawCircle(skiaSurface.Canvas, width / 2 - 60, height / 2);
+drawCircle(skiaSurface.Canvas, width / 2, height / 2);
+drawCircle(skiaSurface.Canvas, width / 2 + 60, height / 2);
+
+static void drawCircle(SKCanvas canvas, float x, float y) {
+    var colors = new[] {
+        SKColors.Firebrick,
+        SKColors.Red
+    };
+
+    var shader = SKShader.CreateLinearGradient(
+        new SKPoint(x - 40, y - 40),
+        new SKPoint(x + 40, y + 40),
+        colors,
+        null,
+        SKShaderTileMode.Clamp);
+
+    canvas.DrawCircle(
+    new SKPoint(x, y),
+    40,
+    new SKPaint {
+        Shader = shader
+    }
+);
+}
 
 // https://github.com/mono/SkiaSharp/issues/2191
 // need to call getBackendRenderTarget or getBackendTexture
@@ -178,7 +211,7 @@ skiaSurface.Canvas.Clear(SKColors.Beige);
 var image = skiaSurface.Snapshot();
 
 
-var jpg = image.Encode(SKEncodedImageFormat.Jpeg, 80);
+var jpg = image.Encode(SKEncodedImageFormat.Jpeg, 95);
 using (var os = File.OpenWrite("vulkan_rendered.jpg")) {
     jpg.SaveTo(os);
 }
