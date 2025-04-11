@@ -137,15 +137,52 @@ var vkContext = GRContext.CreateVulkan(grVkBackendContext);
 if(vkContext == null)
     throw new Exception("Could not create Vulkan Context in Skia!");
 
+var vkSurface = vk.CreateWaylandSurface(wlDisplay, mySurface);
+VkSurfaceCapabilitiesKHR surfaceCaps = new();
+unsafe {
+    VulkanNative.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vk.PhysicalDevice.Handle, vkSurface, &surfaceCaps);
+}
+
+/*
+VkMemoryGetFdInfoKHR fdInfo = new VkMemoryGetFdInfoKHR {
+    sType = VkStructureType.VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR,
+    memory = new VkDeviceMemory {
+
+    }
+};
+int fd;
+
+unsafe {
+    
+    var vkGetMemoryFdKHRPtr = VulkanNative.vkGetDeviceProcAddr(vk.Device.Handle, (byte*)Marshal.StringToHGlobalAnsi("vkGetMemoryFdKHR"));
+    var vkGetMemoryFdKHR = Marshal.GetDelegateForFunctionPointer<Delegates.vkGetMemoryFdKHRDelegate>(vkGetMemoryFdKHRPtr);
+    var result = vkGetMemoryFdKHR(vk.Device.Handle, &fdInfo, &fd);
+    // VulkanNative.vkGetMemoryFdKHR(vk.Device.Handle, &fdInfo, &fd);
+}
+
+
+
+*/
+
+new GRBackendRenderTarget(width, height, 1, new GRVkImageInfo {
+    ImageLayout = 2
+});
+
 var skiaSurface = SKSurface.Create(vkContext, true, new SKImageInfo(width, height));
 
 skiaSurface.Canvas.Clear(SKColors.Beige);
 
+// https://github.com/mono/SkiaSharp/issues/2191
+// need to call getBackendRenderTarget or getBackendTexture
+
 var image = skiaSurface.Snapshot();
+
+
 var jpg = image.Encode(SKEncodedImageFormat.Jpeg, 80);
 using (var os = File.OpenWrite("vulkan_rendered.jpg")) {
     jpg.SaveTo(os);
 }
+
 
 // allocate a shared memory buffer
 var bufferSize = width * height * 3;
